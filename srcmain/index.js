@@ -26,7 +26,7 @@ server.get('/', (req, res) => {
 
 //loginuser
 server.get('/loginuser', (req,res) => {
-    const {usern, pw} = req.body;
+    const {username, password} = req.body;
     //SELECT * FROM users WHERE username = ? AND password = ?
     const query = `SELECT * FROM users WHERE username = ? AND password = ?`;
 
@@ -42,9 +42,9 @@ server.get('/loginuser', (req,res) => {
             user.refreshtoken = refreshtoken;
         
             sendRefreshToken(res, refreshtoken);
-            sendAccessToken(res, req, accesstoken);
+            sendAccessToken(req, res, accesstoken);
 
-            res.send({ results });
+            // res.send({ results });
         }
     });
 });
@@ -625,4 +625,6 @@ server.post('/setconsuldate', async(req,res) => {
 });
 
 
-server.listen(process.env.PORT);
+server.listen(process.env.PORT, () => {
+    console.log(`Listening on port ${process.env.PORT}`);
+});
