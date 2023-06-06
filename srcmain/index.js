@@ -20,12 +20,31 @@ const connection = mysql.createConnection({
     })
 const server = express();
 
+///////////////////////////////////
+// Create an authentication middleware
+const auth = function (req, res, next) {
+    // Check if the user is authenticated
+    const token = req.headers['Authorization'] || '';
+    if (!token || !jwt.verify(token, secret)) {
+      res.status(401).send('Unauthorized');
+      return;
+    }
+  
+    // Set the user in the request object
+    req.user = jwt.decode(token);
+  
+    // Continue with the request
+    next();
+  };
+
+  ///////////////////////////////////
+  
 server.get('/', (req, res) => {
     res.send('Home Page!');
 });
 
 //loginuser
-server.get('/loginuser', (req,res) => {
+server.post('/loginuser', (req,res) => {
     const {username, password} = req.body;
     //SELECT * FROM users WHERE username = ? AND password = ?
     const query = `SELECT * FROM users WHERE username = ? AND password = ?`;
@@ -50,7 +69,7 @@ server.get('/loginuser', (req,res) => {
 });
 
 //registeruser
-server.get('/registeruser', (req,res) => {
+server.post('/registeruser', (req,res) => {
     const {username, name, email, pw, sex} = req.body;
 
     const query = `SELECT * FROM users WHERE username = ?` ;
@@ -76,70 +95,92 @@ server.get('/registeruser', (req,res) => {
 //getactivitiesuser
 server.post('/getactivitiesuser', async(req,res) => {
     const {users_username} = req.body;
-    const query = `SELECT ua.activities_id, a.name, a.logo, ua.description, ua.time FROM users_activities ua INNER JOIN activities a ON ua.activities_id = a.activities_id WHERE ua.users_username = ?`;
 
-    connection.query(query, (err, results) => {
-        if(err) {
-            res.send({ message : 'empty'});
-
-        }else{
-            res.send({ results});
-            // console.log(results);
-        }
-    });
+    if(users_username!==null){
+        const query = 'SELECT ua.activities_id, a.name, a.logo, ua.description, ua.time FROM users_activities ua INNER JOIN activities a ON ua.activities_id = a.activities_id WHERE ua.users_username = ?';
+    
+        connection.query(query, (err, results) => {
+            if(err) {
+                res.send({ 
+                    "error": true , 
+                    "message": "Query gagal" 
+                });                
+            }else{
+                res.send({ 
+                    "error": false, 
+                    "message": "success" , 
+                    "namadata" : results 
+                });
+            }
+        });
+    }else{ res.send({message:"username kosong"})}
 });
 
 //getmotivation
-server.post('/getmotivation', async(req,res) => {
+server.get('/getmotivation', async(req,res) => {
     // const {} = req.body;
     const query = `SELECT * FROM motivations ORDER BY RAND() LIMIT 1`;
 
     connection.query(query, (err, results) => {
         if(err) {
-            res.send({message:'Gagal'});
-
+            res.send({ 
+                "error": true , 
+                "message": "Query gagal" 
+            });                
         }else{
-            res.send({results});
+            res.send({ 
+                "error": false, 
+                "message": "success" , 
+                "namadata" : results 
+            });
         }
-
     });
-    //-----------------------------------------------------
 });
 
 //inputdetailuser
 server.post('/inputdetailuser', async(req,res) => {
     const {body_height, body_weight, age} = req.body;
-    const query = `UPDATE users SET body_height = ?, body_weight = >, age = ? WHERE username ?`;
-
-    connection.query(query, (err, results) => {
-        if(err) {
-
-        }else{
-            res.send({ message: 'User Created'});
-            console.log(results);
-        }
-    });
-    //-----------------------------------------------------
-    try{     
-
-    }catch (err){
-        res.send({
-            error: `${err.message}`
+    if((body_height!==null)&&(body_weight!==null)&&(age!==null)){
+        const query = `UPDATE users SET body_height = ?, body_weight = >, age = ? WHERE username ?`;
+            connection.query(query, (err, results) => {
+                if(err) {
+                    res.send({
+                        "error": true,
+                        "message": "Query gagal"
+                    });
+                }else{
+                    res.send({ 
+                        "error": false, 
+                        "message": "success" , 
+                        "namadata" : results 
+                    });
+                }
+            });
+    }else{
+        res.send({ 
+            "error": true , 
+            "message": "missingparam" 
         });
     }
-});//try check query
+});
 
 //getdoctors
-server.post('/getdoctors', async(req,res) => {
+server.get('/getdoctors', async(req,res) => {
     // const {} = req.body;
     const query = 'SELECT d.username, d.name, d.profile_photo, s.name as specialist, d.price FROM doctors d INNER JOIN specialist s ON d.specialists_id = s.specialists_id';
 
     connection.query(query, (err, results) => {
         if(err) {
-            res.send({message : 'Gagal'});
+            res.send({ 
+                "error": true , 
+                "message": "Query gagal"
+            });
         }else{
-            res.send(results);
-            // console.log(results);
+            res.send({ 
+                "error": false, 
+                "message": "success" , 
+                "namadata" : results 
+            });
         }
     });
 });
@@ -147,79 +188,95 @@ server.post('/getdoctors', async(req,res) => {
 //makeconsul
 server.post('/makeconsul', async(req,res) => {
     const {users_username, doctors_username} = req.body;
-    const query = `INSERT INTO consultations (users_username, doctors_username) VALUES (?,?)`;
-
-    connection.query(query, (err, results) => {
-        if(err) {
-            res.send({message:'Gagal'})
-        }else{
-            res.send(results);
-            // console.log(results);
-        }
-    });
-    //-----------------------------------------------------
-    try{     
-
-    }catch (err){
-        res.send({
-            error: `${err.message}`
+    if((users_username!==null)&&(doctors_username!==null)){
+        const query = `INSERT INTO consultations (users_username, doctors_username) VALUES (?,?)`;
+    
+        connection.query(query, (err, results) => {
+            if(err) {
+                res.send({ 
+                    "error": true , 
+                    "message": "Query gagal"
+                });
+            }else{
+                res.send({ 
+                    "error": false, 
+                    "message": "success" , 
+                    // "namadata" : results 
+                });
+            }
         });
-    }
-}); //pake try
+    }else{
+        res.send({ 
+            "error": true , 
+            "message": "missingparam"
+        });
+    } 
+});
 
 //insertchat
 server.post('/insertchat', async(req,res) => {
     const {consultations_id, sender_username, text, photo} = req.body;
-    //photo optional
-    const query = `INSERT INTO consul_chats (sender_username, ext, consultations_id, photo) VALUES (?,?,?,?)`;
+    if((consultations_id!==null)&&(sender_username!==null)&&(text!==null)){
+        if(photo!==null){
+            //foto
 
-    connection.query(query, (err, results) => {
-        if(err) {
-            res.send({message:'Gagal'})
         }else{
-            res.send(results);
-        }
-    });
-    //-----------------------------------------------------
-    try{     
-
-    }catch (err){
-        res.send({
-            error: `${err.message}`
+            //no foto
+            
+        }//belum paham olah foto
+        const query = 'INSERT INTO consul_chats (sender_username, ext, consultations_id, photo) VALUES (?,?,?,?)';
+        connection.query(query, (err, results) => {
+            if(err) {
+                res.send({ 
+                    "error": false, 
+                    "message": "success" , 
+                    "namadata" : results 
+                }); 
+            }else{
+                res.send({ 
+                    "error": true , 
+                    "message": "Query gagal"
+                });
+            }
+        });
+    }else{
+        res.send({ 
+            "error": true , 
+            "message": "missingparam"
         });
     }
-});//merge try
+});//foto
 
 //showchat
 server.post('/showchat', async(req,res) => {
     const {consultations_id} = req.body;
-    try{     
-        // const check = DB.find(user => user.email === email);
-        if(consultations_id !== null){
-            const query = `SELECT cs.consultations_id, cs.sender_username, cs.text, cs.time, cs.photo, c.doctors_username FROM consul_chats cs INNER JOIN consultations c ON cs.consultations_id = c.consultations_id WHERE consultations_id = ? ORDER BY time ASC`;
-
-            connection.query(query, (errchat, resultchat) => {
-                if(errchat) {
-                    res.send({message:'Gagal'});
-                }else{
-                    connection.query(`SELECT username, name, photo FROM doctors WHERE username = ?`, (err, resultdoctor) => {
-                        if(err){
-                            res.send({message:'Gagal'});
-                        }else{
+    if(consultations_id !== null){
+        const query = `SELECT cs.consultations_id, cs.sender_username, cs.text, cs.time, cs.photo, c.doctors_username FROM consul_chats cs INNER JOIN consultations c ON cs.consultations_id = c.consultations_id WHERE consultations_id = ? ORDER BY time ASC`;
+        connection.query(query, (errchat, resultchat) => {
+            if(errchat) {
+                res.send({ 
+                    "error": true , 
+                    "message": "Query gagal"
+                });
+            }else{
+                connection.query(`SELECT username, name, photo FROM doctors WHERE username = ?`, (err, resultdoctor) => {
+                    if(err){
+                        res.send({message:'Gagal'});
+                    }else{
                         res.send({ 
                             'error' : false,
                             'message': 'success',
                             'data' : [resultchat],
                             'doctor' : {resultdoctor}
-                            });  
-                        }      
-                    });
-                }
-            });   
-        }
-    }catch (err){
-        res.send({
-            error: `${err.message}`
+                        });  
+                    }      
+                });
+            }
+        });   
+    }else{
+        res.send({ 
+            "error": true , 
+            "message": "missingparam"
         });
     }
 });
@@ -227,68 +284,76 @@ server.post('/showchat', async(req,res) => {
 // uploadtest
 server.post('/uploadtest', async(req,res) => {
     const {users_username} = req.body; //foto
-    try{     
-
-    }catch (err){
-        res.send({
-            error: `${err.message}`
+    if(users_username!==null){
+        const query = `INSERT INTO pos_certificates (users_username, file) VALUES (?,?)`;
+        
+        connection.query(query, (err, results) => {
+            if(err) {
+    
+            }else{
+                res.send({ message: 'User Created'});
+                console.log(results);
+            }
+        });
+    }else{
+        res.send({ 
+            "error": true , 
+            "message": "missingparam"
         });
     }
-    const query = `INSERT INTO pos_certificates (users_username, file) VALUES (?,?)`;
-
-    connection.query(query, (err, results) => {
-        if(err) {
-
-        }else{
-            res.send({ message: 'User Created'});
-            console.log(results);
-        }
-    });
-    //-----------------------------------------------------
-    
-}); //not done, blm ngerti foto
+}); //not done, blm ngerti foto, 2 data?
 
 //checkposcer
 server.post('/checkposcer', async(req,res) => {
     const {users_username} = req.body;
-    try{
-        if (users_username !== null){
-            const query = `SELECT * FROM pos_certificates WHERE users_username = ?`;
-
+    if (users_username !== null){
+        const query = 'SELECT * FROM pos_certificates WHERE users_username = ?';
         connection.query(query, (err, results) => {
             if(err) {
-
+                res.send({ 
+                    "error": true , 
+                    "message": "Query gagal"
+                });
             }else{
-                res.send(results);
+                res.send({ 
+                    "error": false, 
+                    "message": "success" 
+                    });
             }
         });
-        }     
-    }catch (err){
-        res.send({
-            message: 'Gagal'
+    }else{
+        res.send({ 
+            "error": true , 
+            "message": "missingparam"
         });
-    } 
+    }  
 });
 
 //getpost, ML 
 server.post('/getpost', async(req,res) => {
     const {users_username} = req.body;
-    try{
-        if(users_username !== null){
-            const query = `SELECT p.posts_id, p.title, p.content, pl.users_username as is_like FROM posts p LEFT JOIN posts_likes pl ON p.posts_id pl.posts_id AND pl.users_username = ?`;
+    if(users_username!==null){
+        const query = `SELECT p.posts_id, p.title, p.content, pl.users_username as is_like FROM posts p LEFT JOIN posts_likes pl ON p.posts_id pl.posts_id AND pl.users_username = ?`;
 
-            connection.query(query, (err, results) => {
-                if(err) {
-                    res.send({message:'Gagal'});                
-                }else{
-                    results.push({message:'Sukses'});
-                    res.send(results);
-                    // console.log('Sukses');
-                }
-            });
-        }
-    }catch(err){
-        res.send({message:'Gagal'});
+        connection.query(query, (err, results) => {
+            if(err) {
+                res.send({ 
+                    "error": true , 
+                    "message": "Query gagal"
+                });                
+            }else{
+                res.send({ 
+                    "error": false, 
+                    "message": "success" , 
+                    "namadata" : results 
+                });
+            }
+        });
+    }else{
+        res.send({ 
+            "error": true , 
+            "message": "missingparam"
+        });
     }
 });
 
@@ -296,19 +361,27 @@ server.post('/getpost', async(req,res) => {
 server.post('/likepost', async(req,res) => {
     const {users_username, posts_id} = req.body;
     if((users_username!==null) && (posts_id!==null)){
-        const query = `INSERT INTO posts_likes (posts_id, users_username) VALUES (?,?)`;
+        const query = 'INSERT INTO posts_likes (posts_id, users_username) VALUES (?,?)';
         
         connection.query(query, (err, results) => {
             if(err) {
-                res.send({message:'Gagal'});
+                res.send({ 
+                    "error": true , 
+                    "message": "Query gagal"
+                });
             }else{
-                res.send(results);
-                console.log('Berhasil');
+                res.send({ 
+                    "error": false, 
+                    "message": "success" , 
+                    "namadata" : results 
+                });
             }
         });
     }else{
-        res.send({message:'Gagal'});
-
+        res.send({ 
+            "error": true , 
+            "message": "missingparam"
+        });
     }
 });
 
@@ -316,12 +389,16 @@ server.post('/likepost', async(req,res) => {
 server.post('/readpost', async(req, res) => {
     const {posts_id, users_username} = req.body;
     if((users_username!==null) && (posts_id!==null)){
-        const query = `SELECT p.title, p.date, p.photo_header, p.content, u.name FROM posts p INNER JOIN users u ON p.username_users = u.username WHERE p.posts_id = ?`;
+        const query = 'SELECT p.title, p.date, p.photo_header, p.content, u.name FROM posts p INNER JOIN users u ON p.username_users = u.username WHERE p.posts_id = ?';
         connection.query(query, (err, results) => {
             if(err) {
-                res.send({message:'Gagal'});
+                res.send({ 
+                    "error": true , 
+                    "message": "Query gagal"
+                });
             }else{
-                connection.query(`SELECT * FROM posts p LEFT JOIN posts_likes pl ON p.posts_id = ol.posts_id WHERE pl.users_username = ?`, (err2,res2) => {
+                connection.query('SELECT * FROM posts p LEFT JOIN posts_likes pl ON p.posts_id = ol.posts_id WHERE pl.users_username = ?', (err2,res2) => {
+                    //belom gabung data query
                     if(err2){
                         res.send({
                             "error":false,
@@ -337,155 +414,233 @@ server.post('/readpost', async(req, res) => {
                             "data":[dataq1],
                             "isLike":false
                         });
-
                     }
-                })
+                });
             }
         });
     }else{
-        res.send({message:'Gagal'});
+        res.send({ 
+            "error": true , 
+            "message": "missingparam"
+        });
     }
-})
+}); //belom gabung query
 
 //readcomment
 server.post('/readcomment', async(req,res) => {
     const {posts_id} = req.body;
-    try{
-        if (posts_id !==null){
-            const query = `SELECT u.name, u.profile_photo, cp.date, cp.content FROM comments_posts cp INNER JOIN users u ON cp.users_username = u.username WHERE cp.posts_id = ?`;
+    if (posts_id !==null){
+        const query = 'SELECT u.name, u.profile_photo, cp.date, cp.content FROM comments_posts cp INNER JOIN users u ON cp.users_username = u.username WHERE cp.posts_id = ?';
 
-            connection.query(query, (err, results) => {
-                if(err) {
-                    res.send({message:"Gagal"});                
-                }else{
-                    results.push({message:'Sukses'});
-                    res.send(results);
-                }
-            });
-        }
-    }catch(err){
-        res.send({message:"Gagal"});
+        connection.query(query, (err, results) => {
+            if(err) {
+                res.send({ 
+                    "error": true , 
+                    "message": "Query gagal"
+                });                
+            }else{
+                res.send({ 
+                    "error": false, 
+                    "message": "success" , 
+                    "namadata" : results 
+                });
+            }
+        });
+    }else{
+        res.send({ 
+            "error": true , 
+            "message": "missingparam"
+        });
     }
 });
 
 //insertcomment
 server.post('/insertcomment', async(req,res) => {
     const {sender_username, posts_id, content} = req.body;
-    try{
-        if ((sender_username!==null)&&(posts_id !==null)&&(content!==null)){
-            const query = `INSERT INTO (posts_id, sender_username, content) comments_posts VALUES (?,?,?)`;
-            connection.query(query, (err, results) => {
-                if(err) {
-                    res.send({message:"Gagal"});                
-                }else{
-                    res.send({message:'Sukses'});
-                }
-            });
-        }
-    }catch(err){
-        res.send({message:"Gagal"});
+    if ((sender_username!==null)&&(posts_id !==null)&&(content!==null)){
+        const query = 'INSERT INTO (posts_id, sender_username, content) comments_posts VALUES (?,?,?)';
+        connection.query(query, (err, results) => {
+            if(err) {
+                res.send({ 
+                    "error": true , 
+                    "message": "Query gagal"
+                });                
+            }else{
+                res.send({ 
+                    "error": false , 
+                    "message": "Pesan berhasil"
+                });
+            }
+        });
+    }else{
+        res.send({ 
+            "error": true , 
+            "message": "missingparam"
+        });
     }
 });
 
 //createpost
 server.post('/createpost', async(req,res) => {
     const {users_username, posts_id, title, photo_header, content, tag} = req.body;
-    try{
-        if ((users_username!==null)&&(posts_id!==null)&&(title!==null)&&(photo_header!==null)&&(content!==null)&&(tag!==null)){
-            const query = `INSERT INTO posts (posts_id, users_username, title, photo_header, content) VALUES (?,?,?,?,?)`;
-            connection.query(query, (err, results) => {
-                if(err) {
-                    res.send({message:"Gagal"});                
-                }else{
-                    //ambil id, tag, convert param
-                    //loop array dan query selama looping
-                    //loop
-                    connection.query(`INSERT INTO tag_posts (id_posts,tag) VALUES (?,?)`, (err2, result2) => {
-                        if(err2){
-                            res.send({message:"Gagal"});
-                        }else{
-                            res.send(result2);
-                        }
-                    })
-                }
-            });
-        }
-    }catch(err){
-        res.send({message:"Gagal"});
+
+    //olah foto???
+    if ((users_username!==null)&&(posts_id!==null)&&(title!==null)&&(photo_header!==null)&&(content!==null)&&(tag!==null)){
+        const query = 'INSERT INTO posts (posts_id, users_username, title, photo_header, content) VALUES (?,?,?,?,?)';
+        connection.query(query, (err, results) => {
+            if(err) {
+                res.send({ 
+                    "error": true , 
+                    "message": "Query gagal"
+                });                
+            }else{
+                //ambil id, tag, convert param
+                //loop array dan query selama looping
+                //loop
+                connection.query('INSERT INTO tag_posts (id_posts,tag) VALUES (?,?)', (err2, result2) => {
+                    if(err2){
+                        res.send({message:"Gagal"});
+                    }else{
+                        res.send(result2);
+                    }
+                })
+            }
+        });
+    }else{
+        res.send({ 
+            "error": true , 
+            "message": "missingparam"
+        });
     }
-});
+}); //foto
 
 //uploadprofilepic
+server.post('/uploadprofilepic', (req, res) => {
+    const{username, profile_photo} = req.body;
 
-/////--------------------------------lupa throw error buat catch
+    if((username!==null)&&(profile_photo!==null)){
+        const query = 'UPDATE users SET profile_photo = ? WHERE username = ?';
+
+        connection.query(query, (err, result) => { 
+            if(err){
+                res.send({ 
+                    "error": true , 
+                    "message": "Query gagal"
+                });
+            }else{
+                res.send({ 
+                    "error": false, 
+                    "message": "success"
+                });
+            }
+        })
+    }else{
+        res.send({ 
+            "error": true , 
+            "message": "missingparam"
+        });
+    }
+});//foto
 
 //updateaccount
 server.post('/updateaccount', async(req,res) => {
     const {username,name} = req.body;
-    try{
-        if ((username!==null)&&(name!==null)){
-            const query = `UPDATE users SET name = ? WHERE username = ?`;
-            connection.query(query, (err, results) => {
-                if(err) {
-                    res.send({message:"Gagal"});                
-                }else{
-                    res.send(results);                    
-                }
-            });
-        }else{ throw new Error("Gagal")}
-    }catch(err){
-        res.send({error: `${err.message}`});
+    if ((username!==null)&&(name!==null)){
+        const query = 'UPDATE users SET name = ? WHERE username = ?';
+        connection.query(query, (err, results) => {
+            if(err) {
+                res.send({ 
+                    "error": true , 
+                    "message": "Query gagal"
+                });                
+            }else{
+                res.send({ 
+                    "error": false, 
+                    "message": "success"
+                });                    
+            }
+        });
+    }else{ 
+        res.send({ 
+            "error": true , 
+            "message": "missingparam"
+        });
     }
 });
 
 //getconsultation
 server.post('/getconsultation', async(req,res) => {
-    // const {} = req.body;
-    const query = `SELECT date_consul FROM users WHERE username = ?`;
-
-    connection.query(query, (err, results) => {
-        if(err) {
-            res.send({message:"Gagal"});
-        }else{
-            res.send(results);
-        }
-    });
+    const {username} = req.body;
+    if(username!==null){
+        const query = 'SELECT date_consul FROM users WHERE username = ?';
+    
+        connection.query(query, (err, results) => {
+            if(err) {
+                res.send({ 
+                    "error": true, 
+                    "message": "Query gagal"
+                });
+            }else{
+                res.send({ 
+                    "error": false, 
+                    "message": "success",
+                    "data" : results
+                });
+            }
+        });
+    }else{
+        res.send({ 
+            "error": true, 
+            "message": "missingparam"
+        });
+    }
 });
 
 //logindoctor
 server.post('/logindoctor', async(req,res) => {
     const {username, password} = req.body;
+    if((username!==null)&&(password!==null)){
+        const query = 'SELECT * FROM doctors d INNER JOIN s WHERE username = ? AND password = ?';
+        connection.query(query, (err, results) => {
+            if(err) {
+                res.send({ 
+                    "error": true , 
+                    "message": "Query gagal"
+                });     
+            }else{
 
-    try{
-        if((username!==null)&&(password!==null)){
-            const query = 'SELECT * FROM doctors d INNER JOIN s WHERE username = ? AND password = ?';
-            connection.query(query, (err, results) => {
-                if(err) {
-                    throw new Error('Query gagal');      
-                }else{
-                    // if
-                    res.send(results);
-                }
-            });
-        }else{throw new Error('Gagal')}
-    }catch{
-        res.send({
-            error: `${err.message}`
+                //querry == 1 ???
+                res.send({ 
+                    "error": true , 
+                    "message": "success",
+                    "data":results
+                });
+            }
         });
+    }else{
+        res.send({ 
+            "error": true , 
+            "message": "missingparam"
+        });   
     }
 });
 
 //getspecialist
-server.post('/getspecialist', async(req,res) => {
-    // const {} = req.body;
+server.get('/getspecialist', async(req,res) => {
     const query = 'SELECT * FROM specialists';
 
     connection.query(query, (err, results) => {
         if(err) {
-            res.send({message:"Querry Gagal"});
+            res.send({ 
+                "error": true , 
+                "message": "Query gagal"
+            });
         }else{
-            res.send(results);
-            // console.log(results);
+            res.send({ 
+                "error": false , 
+                "message": "success",
+                "data":results
+            });
         }
     });
 });
@@ -493,40 +648,75 @@ server.post('/getspecialist', async(req,res) => {
 //registerdoctor
 server.post('/registerdoctor', async(req,res) => {
     const {username, nama, email, password, gender, specialists_id} = req.body;
-    const query = 'SELECT * FROM specialists';
-    connection.query(query, (err, results) => {
-        if(err) {
-            res.send({message:"Username telah dipakai"});
-        }else{
-            connection.query('INSERT INTO doctors (username, name, email, password, sex, specialists_id) VALUES (?,?,?,?,?,?)', (err2,result2) =>{
-                if(err2){
-                    res.send({message:'Querry Gagal'});
+    if((username!==null)&&(nama!==null)&&(email!==null)&&(password!==null)&&(gender!==null)&&(specialists_id!==null)){
+        const query = 'SELECT * FROM specialists';
+        connection.query(query, (err, results) => {
+            if(err) {
+                res.send({ 
+                    "error": true , 
+                    "message": "Query gagal"
+                });
+            }else{
+                if(results == 0){
+                    connection.query('INSERT INTO doctors (username, name, email, password, sex, specialists_id) VALUES (?,?,?,?,?,?)', (err2,result2) =>{
+                        if(err2){
+                            res.send({ 
+                                "error": false, 
+                                "message": "Register Berhasil!!!"
+                            });
+                        }else{
+                            res.send({ 
+                                "error": true , 
+                                "message": "Querry Gagal"
+                            });
+                        }
+                    });
                 }else{
-                    res.send({message:"Register Berhasil!!!"});
+                    res.send({ 
+                        "error": true , 
+                        "message": "Gagal register"
+                    });
                 }
-            });
-        }
-    });
-});
+            }
+        });
+    }else{
+        res.send({ 
+            "error": true , 
+            "message": "missingparam"
+        });
+    }
+}); //>0 ??
 
 //getdoctorconsultations
-server.post('/getdoctorconsultations', async(req,res) => {
-    const {username, nama, email, password, gender, specialists_id} = req.body;
-    const query = 'SELECT * FROM specialists';
-    connection.query(query, (err, results) => {
-        if(err) {
-            res.send({message:"Username telah dipakai"});
-        }else{
-            connection.query('INSERT INTO doctors (username, name, email, password, sex, specialists_id) VALUES (?,?,?,?,?,?)', (err2,result2) => {
-                if(err2){
-                    res.send({message:'Querry Gagal'});
-                }else{
-                    res.send({message:"Register Berhasil!!!"});
-                }
-            });
-        }
-    });
+server.get('/getdoctorconsultations', (req,res) => {
+    const {consultations_id} = req.body;
+    if(consultations_id!==null){
+        const query = '' ;
+
+    }else{
+        res.send({ 
+            "error": true , 
+            "message": "missingparam"
+        });
+    }
 });
+// server.post('/getdoctorconsultations', async(req,res) => {
+//     const {username, nama, email, password, gender, specialists_id} = req.body;
+//     const query = 'SELECT * FROM specialists';
+//     connection.query(query, (err, results) => {
+//         if(err) {
+//             res.send({message:"Username telah dipakai"});
+//         }else{
+//             connection.query('INSERT INTO doctors (username, name, email, password, sex, specialists_id) VALUES (?,?,?,?,?,?)', (err2,result2) => {
+//                 if(err2){
+//                     res.send({message:'Querry Gagal'});
+//                 }else{
+//                     res.send({message:"Register Berhasil!!!"});
+//                 }
+//             });
+//         }
+//     });
+// });
 
 //getdoctorconsul
 server.post('/getdoctorconsul', async(req,res) => {
