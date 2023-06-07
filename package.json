@@ -2,10 +2,10 @@
   "name": "userauth",
   "version": "1.0.0",
   "description": "",
-  "main": "index.js",
+  "main": "app.js",
   "scripts": {
-    "start": "node srcmain/index.js",
-    "dev": "nodemon srcmain/index.js",
+    "start": "node srcmain/app.js",
+    "dev": "nodemon srcmain/app.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": "",
