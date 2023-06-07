@@ -1,10 +1,22 @@
 const express = require('express');
 const bodyParser = require('body-parser');
 const mysql = require('mysql');
+const jwt = require("jsonwebtoken");
+require('dotenv/config');
 
 const app = express();
-app.use(bodyParser.json());
 
+const {
+  //tokens
+createAccessToken,
+createRefreshToken,
+sendAccessToken,
+sendRefreshToken
+} = require('/tokens.js');
+
+
+app.use(bodyParser.json());
+//==================local storage testing =======================================
 const multer = require('multer');
 
 // Configure multer storage
@@ -18,17 +30,65 @@ const storage = multer.diskStorage({
     cb(null, `${uniqueSuffix}.${fileExtension}`);
   }
 });
-
 // Create multer upload instance
 const upload = multer({ storage: storage });
+//===============================================================================
+
+//=================cloud storage=================================================
+const { Storage } = require('@google-cloud/storage');
+
+const projectId = process.env.CLOUD_PROJECT_ID;
+const credentials = process.env.GOOGLE_CLOUD_CREDENTIALS;
+
+const cloudStorage = new Storage(projectId, credentials);
+
+const bucket = cloudStorage.bucket(process.env.BUCKET_NAME);
+
+//===============================================================================
+
+//=========jwt authentication====================================================
+const verifyToken = (req, res, next) => {
+  // Get the JWT token from the request header
+  const token = req.headers['x-access-token'];
+
+  // If the token is not present, return a 401 Unauthorized error
+  if (!token) {
+    return res.status(401).send('Unauthorized');
+  }
+
+  // Try to verify the JWT token
+  try {
+    // Decode the JWT token
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+    // If the JWT token is valid, set the `user` property on the request object
+    req.user = decoded;
+
+    // Continue to the next middleware function
+    next();
+  } catch (err) {
+    // If the JWT token is invalid, return a 401 Unauthorized error
+    return res.status(401).send('Unauthorized');
+  }
+};
+app.use(verifyToken);
+//===============================================================================
 
 // MySQL connection configuration
+//local testing
 const connection = mysql.createConnection({
   host: 'localhost',
   user: 'root',
   password: '',
   database: 'capstone',
 });
+//deploy testing
+// const connection = mysql.createConnection({
+//   host: process.env.HOST_DATABASE,
+//   user: process.env.USERNAME_DATABASE,
+//   password: process.env.PASSWORD_DATABASE,
+//   database: process.env.NAME_DATABASE
+// })
 
 // Test the database connection
 connection.connect((err) => {
@@ -38,6 +98,8 @@ connection.connect((err) => {
     console.log('Connected to the database');
   }
 });
+
+//==================API endpoints
 
 // API endpoint for user login
 app.post('/login', (req, res) => {
@@ -54,6 +116,15 @@ app.post('/login', (req, res) => {
         res.status(401).json({ error: 'Invalid username or password' });
       } else {
         const user = results[0];
+        const accesstoken = createAccessToken(user.id);
+        const refreshtoken = createRefreshToken(user.id);
+        //store refresh token in db
+        user.refreshtoken = refreshtoken;
+    
+        //send token; refreshtoken as cookie, accesstoken as regular response
+        sendRefreshToken(res, refreshtoken);
+        sendAccessToken(req, res, accesstoken);
+
         res.json({ message: 'Login successful', user });
       }
     }
@@ -100,7 +171,8 @@ app.post('/register', (req, res) => {
 
 // API endpoint for retrieving user activities
 app.get('/getactivitiesuser/:username', (req, res) => {
-    const username = req.params.username;
+
+  const username = req.params.username;
   
     // Check if user has any activities
     const query =
@@ -125,167 +197,171 @@ app.get('/getactivitiesuser/:username', (req, res) => {
 
 // API endpoint for retrieving a random motivation
 app.get('/getmotivation', (req, res) => {
-    // Retrieve a random motivation
-    const query = 'SELECT * FROM motivations ORDER BY RAND() LIMIT 1';
-  
-    connection.query(query, (err, results) => {
-      if (err) {
-        console.error('Error executing query:', err);
-        res.status(500).json({ error: 'Failed to retrieve motivation' });
+  // Retrieve a random motivation
+  const query = 'SELECT * FROM motivations ORDER BY RAND() LIMIT 1';
+
+  connection.query(query, (err, results) => {
+    if (err) {
+      console.error('Error executing query:', err);
+      res.status(500).json({ error: 'Failed to retrieve motivation' });
+    } else {
+      if (results.length === 0) {
+        res.json({ message: 'No motivation found' });
       } else {
-        if (results.length === 0) {
-          res.json({ message: 'No motivation found' });
-        } else {
-          const motivation = results[0];
-          res.json({ message: 'Motivation retrieved', data: motivation });
-        }
+        const motivation = results[0];
+        res.json({ message: 'Motivation retrieved', data: motivation });
       }
-    });
+    }
   });
+});
 
 // API endpoint for updating user details
 app.post('/inputdetailuser', (req, res) => {
-    const { username, body_height, body_weight, age } = req.body;
-  
-    // Check if all parameters are provided
-    if (!username || !body_height || !body_weight || !age) {
-      return res.status(400).json({ error: 'Missing parameters' });
-    }
-  
-    // Update user details
-    const query = 'UPDATE users SET body_height = ?, body_weight = ?, age = ? WHERE username = ?';
-  
-    connection.query(query, [body_height, body_weight, age, username], (err, results) => {
-      if (err) {
-        console.error('Error executing query:', err);
-        res.status(500).json({ error: 'Failed to update user details' });
+  const { username, body_height, body_weight, age } = req.body;
+
+  // Check if all parameters are provided
+  if (!username || !body_height || !body_weight || !age) {
+    return res.status(400).json({ error: 'Missing parameters' });
+  }
+
+  // Update user details
+  const query = 'UPDATE users SET body_height = ?, body_weight = ?, age = ? WHERE username = ?';
+
+  connection.query(query, [body_height, body_weight, age, username], (err, results) => {
+    if (err) {
+      console.error('Error executing query:', err);
+      res.status(500).json({ error: 'Failed to update user details' });
+    } else {
+      if (results.affectedRows > 0) {
+        res.json({ message: 'User details updated successfully' });
       } else {
-        if (results.affectedRows > 0) {
-          res.json({ message: 'User details updated successfully' });
-        } else {
-          res.json({ message: 'User not found' });
-        }
+        res.json({ message: 'User not found' });
       }
-    });
+    }
   });
-  
+});
+
 // API endpoint for retrieving doctors
 app.get('/getdoctors', (req, res) => {
-    // Retrieve doctors with their specialist information
-    const query = 'SELECT d.username, d.name, d.profile_photo, s.name as specialist, d.price FROM doctors d INNER JOIN specialists s ON d.specialists_id = s.specialists_id';
-  
-    connection.query(query, (err, results) => {
-      if (err) {
-        console.error('Error executing query:', err);
-        res.status(500).json({ error: 'Failed to retrieve doctors' });
-      } else {
-        res.json({ message: 'Doctors retrieved successfully', data: results });
-      }
-    });
+  // Retrieve doctors with their specialist information
+  const query = 'SELECT d.username, d.name, d.profile_photo, s.name as specialist, d.price FROM doctors d INNER JOIN specialists s ON d.specialists_id = s.specialists_id';
+
+  connection.query(query, (err, results) => {
+    if (err) {
+      console.error('Error executing query:', err);
+      res.status(500).json({ error: 'Failed to retrieve doctors' });
+    } else {
+      res.json({ message: 'Doctors retrieved successfully', data: results });
+    }
   });
+});
 
 // API endpoint for creating a consultation
 app.post('/makeconsul', (req, res) => {
-    const { users_username, doctors_username } = req.body;
-  
-    // Check if both parameters are provided
-    if (!users_username || !doctors_username) {
-      return res.status(400).json({ error: 'Missing parameters' });
-    }
-  
-    // Insert consultation
-    const query = 'INSERT INTO consultations (users_username, doctors_username) VALUES (?,?)';
-  
-    connection.query(query, [users_username, doctors_username], (err, results) => {
-      if (err) {
-        console.error('Error executing query:', err);
-        res.status(500).json({ error: 'Failed to create consultation' });
+  const { users_username, doctors_username } = req.body;
+
+  // Check if both parameters are provided
+  if (!users_username || !doctors_username) {
+    return res.status(400).json({ error: 'Missing parameters' });
+  }
+
+  // Insert consultation
+  const query = 'INSERT INTO consultations (users_username, doctors_username) VALUES (?,?)';
+
+  connection.query(query, [users_username, doctors_username], (err, results) => {
+    if (err) {
+      console.error('Error executing query:', err);
+      res.status(500).json({ error: 'Failed to create consultation' });
+    } else {
+      if (results.affectedRows > 0) {
+        res.json({ message: 'Consultation created successfully', consultationId: results.insertId });
       } else {
-        if (results.affectedRows > 0) {
-          res.json({ message: 'Consultation created successfully', consultationId: results.insertId });
-        } else {
-          res.json({ message: 'Failed to create consultation' });
-        }
+        res.json({ message: 'Failed to create consultation' });
       }
-    });
+    }
   });
-  
+});
+
 // API endpoint for inserting a chat message
 app.post('/insertchat', upload.single('photo'), (req, res) => {
-    const { consultations_id, sender_username, text } = req.body;
-    const photo = req.file ? req.file.path : null;
-  
-    // Check if required parameters are provided
-    if (!consultations_id || !sender_username || !text) {
-      return res.status(400).json({ error: 'Missing parameters' });
-    }
-  
-    // Get the current timestamp
-    const time = new Date();
+  const { consultations_id, sender_username, text } = req.body;
+  const photo = req.file ? req.file.path : null;
 
-    // Insert chat message
-    const query = 'INSERT INTO consul_chats (sender_username, text, consultations_id, photo, time) VALUES (?,?,?,?,?)';
-  
-    connection.query(query, [sender_username, text, consultations_id, photo, time], (err, results) => {
-      if (err) {
-        console.error('Error executing query:', err);
-        res.status(500).json({ error: 'Failed to insert chat message' });
-      } else {
-        if (results.affectedRows > 0) {
-          res.json({ message: 'Chat message inserted successfully' });
-        } else {
-          res.json({ message: 'Failed to insert chat message' });
-        }
-      }
-    });
+  const blob = bucket.file('your-picture-name');
+  blob.upload(new Buffer(req.file ? req.file.path : null), {
+    resumable: true,
   });
-  
+
+  // Check if required parameters are provided
+  if (!consultations_id || !sender_username || !text) {
+    return res.status(400).json({ error: 'Missing parameters' });
+  }
+
+  // Get the current timestamp
+  const time = new Date();
+
+  // Insert chat message
+  const query = 'INSERT INTO consul_chats (sender_username, text, consultations_id, photo, time) VALUES (?,?,?,?,?)';
+
+  connection.query(query, [sender_username, text, consultations_id, photo, time], (err, results) => {
+    if (err) {
+      console.error('Error executing query:', err);
+      res.status(500).json({ error: 'Failed to insert chat message' });
+    } else {
+      if (results.affectedRows > 0) {
+        res.json({ message: 'Chat message inserted successfully' });
+      } else {
+        res.json({ message: 'Failed to insert chat message' });
+      }
+    }
+  });
+});
+
 // API endpoint for retrieving chat messages
 app.get('/showchat', (req, res) => {
-    const { consultations_id } = req.query;
-  
-    // Check if consultation ID is provided
-    if (!consultations_id) {
-      return res.status(400).json({ error: 'Missing consultation ID' });
-    }
-  
-    // Retrieve chat messages and doctor information
-    const chatQuery = 'SELECT cs.consultations_id, cs.sender_username, cs.text, cs.time, cs.photo, c.doctors_username FROM consul_chats cs INNER JOIN consultations c ON cs.consultations_id = c.consultations_id WHERE cs.consultations_id = ? ORDER BY cs.time ASC';
-    const doctorQuery = 'SELECT username, name, profile_photo FROM doctors WHERE username = ?';
-  
-    connection.query(chatQuery, [consultations_id], (err, chatResults) => {
-      if (err) {
-        console.error('Error executing chat query:', err);
-        res.status(500).json({ error: 'Failed to retrieve chat messages' });
-      } else {
-        connection.query(doctorQuery, [chatResults[0].doctors_username], (err, doctorResults) => {
-          if (err) {
-            console.error('Error executing doctor query:', err);
-            res.status(500).json({ error: 'Failed to retrieve doctor information' });
-          } else {
-            const dataChat = chatResults.map(chat => {
-              return {
-                consultations_id: chat.consultations_id,
-                sender_username: chat.sender_username,
-                text: chat.text,
-                time: chat.time,
-                photo: chat.photo
-              };
-            });
-  
-            const dataDoctor = {
-              username: doctorResults[0].username,
-              name: doctorResults[0].name,
-              photo: doctorResults[0].photo
+  const { consultations_id } = req.query;
+
+  // Check if consultation ID is provided
+  if (!consultations_id) {
+    return res.status(400).json({ error: 'Missing consultation ID' });
+  }
+
+  // Retrieve chat messages and doctor information
+  const chatQuery = 'SELECT cs.consultations_id, cs.sender_username, cs.text, cs.time, cs.photo, c.doctors_username FROM consul_chats cs INNER JOIN consultations c ON cs.consultations_id = c.consultations_id WHERE cs.consultations_id = ? ORDER BY cs.time ASC';
+  const doctorQuery = 'SELECT username, name, profile_photo FROM doctors WHERE username = ?';
+
+  connection.query(chatQuery, [consultations_id], (err, chatResults) => {
+    if (err) {
+      console.error('Error executing chat query:', err);
+      res.status(500).json({ error: 'Failed to retrieve chat messages' });
+    } else {
+      connection.query(doctorQuery, [chatResults[0].doctors_username], (err, doctorResults) => {
+        if (err) {
+          console.error('Error executing doctor query:', err);
+          res.status(500).json({ error: 'Failed to retrieve doctor information' });
+        } else {
+          const dataChat = chatResults.map(chat => {
+            return {
+              consultations_id: chat.consultations_id,
+              sender_username: chat.sender_username,
+              text: chat.text,
+              time: chat.time,
+              photo: chat.photo
             };
-  
-            res.json({ error: false, message: 'success', data: dataChat, doctor: dataDoctor });
-          }
-        });
-      }
-    });
+          });
+
+          const dataDoctor = {
+            username: doctorResults[0].username,
+            name: doctorResults[0].name,
+            photo: doctorResults[0].photo
+          };
+
+          res.json({ error: false, message: 'success', data: dataChat, doctor: dataDoctor });
+        }
+      });
+    }
   });
-  
+});
 // API endpoint for uploading a file
 app.post('/uploadtest', upload.single('file'), (req, res) => {
     const { users_username } = req.body;
@@ -502,8 +578,8 @@ app.post('/insertcomment', (req, res) => {
   
 // for generate unique posts_id
 function generateUniqueID(maxValue) {
-    const randomID = Math.floor(Math.random() * maxValue); // Generate a random number within the maximum value range
-    return randomID;
+  const randomID = Math.floor(Math.random() * maxValue); // Generate a random number within the maximum value range
+  return randomID;
   }
 // Endpoint: createpost
 app.post('/createpost', (req, res) => {
@@ -513,7 +589,7 @@ app.post('/createpost', (req, res) => {
     if (!users_username || !title || !photo_header || !content || !tag) {
       return res.json({ error: true, message: 'Missing required parameters' });
     }
-  
+
     // Generate a unique posts_id
     const maxPostsID = 999999999; // Maximum value for posts_id column
     const posts_id = generateUniqueID(maxPostsID);

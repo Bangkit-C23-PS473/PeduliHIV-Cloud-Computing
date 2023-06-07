@@ -17,7 +17,7 @@ const connection = mysql.createConnection({
         user: process.env.USERNAME_DATABASE,
         password: process.env.PASSWORD_DATABASE,
         database: process.env.NAME_DATABASE
-    })
+    });
 const server = express();
 
 ///////////////////////////////////
@@ -38,7 +38,7 @@ const auth = function (req, res, next) {
   };
 
   ///////////////////////////////////
-  
+
 server.get('/', (req, res) => {
     res.send('Home Page!');
 });
