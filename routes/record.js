@@ -11,10 +11,10 @@ const multer = Multer({
 
 // MySQL connection configuration
 const connection = mysql.createConnection({
-    host: 'Our_Public_IP_SQL',
-    user: 'SQL_Usernam',
-    password: 'SQL_Password',
-    database: 'SQL_Database',
+    host: '34.128.107.84',
+    user: 'root',
+    password: 'PassPeduliHIV',
+    database: 'capstone1',
   });
 
 // Test the database connection
@@ -269,7 +269,7 @@ router.post('/login', (req, res) => {
               const dataDoctor = {
                 username: doctorResults[0].username,
                 name: doctorResults[0].name,
-                photo: doctorResults[0].photo
+                photo: doctorResults[0].profile_photo
               };
     
               res.json({ error: false, message: 'success', data: dataChat, doctor: dataDoctor });
