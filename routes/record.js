@@ -14,7 +14,7 @@ const connection = mysql.createConnection({
     host: '34.128.107.84',
     user: 'root',
     password: 'PassPeduliHIV',
-    database: 'capstone',
+    database: 'capstone1',
   });
 
 // Test the database connection
@@ -771,33 +771,34 @@ router.post('/getdoctorconsultations', (req, res) => {
       });
     });
     
-  // Endpoint: getusersactivities
-  router.get('/getusersactivities', (req, res) => {
-      const { users_username } = req.query;
-    
-      // Check if the required parameter is provided
-      if (!users_username) {
-        return res.json({ error: true, message: 'Missing users_username parameter' });
+// Endpoint: getusersactivities
+router.get('/getusersactivities', (req, res) => {
+    const { users_username } = req.query;
+  
+    // Check if the required parameter is provided
+    if (!users_username) {
+      return res.json({ error: true, message: 'Missing users_username parameter' });
+    }
+  
+    // Execute the SQL query
+    const query = 'SELECT ua.activities_id, a.name, a.logo, ua.description, ua.time FROM users_activities ua INNER JOIN activities a ON ua.activities_id = a.id WHERE ua.users_username = ? ORDER BY ua.time ASC';
+  
+    connection.query(query, [users_username], (err, results) => {
+      if (err) {
+        console.log(err);
+        return res.json({ error: true, message: 'Failed to fetch user activities' });
       }
-    
-      // Execute the SQL query
-      const query = 'SELECT * FROM users_activities da INNER JOIN activities a ON da.activities_id = a.id WHERE da.users_username = ?';
-    
-      connection.query(query, [users_username], (err, results) => {
-        if (err) {
-          console.log(err);
-          return res.json({ error: true, message: 'Failed to fetch user activities' });
-        }
-    
-        // Check if any activities were found
-        if (results.length === 0) {
-          return res.json({ error: false, message: 'No activities found for the user', data: [] });
-        }
-    
-        // Return the activities data
-        return res.json({ error: false, message: 'Success', data: results });
-      });
+  
+      // Check if any activities were found
+      if (results.length === 0) {
+        return res.json({ error: false, message: 'No activities found for the user', data: [] });
+      }
+  
+      // Return the activities data
+      return res.json({ error: false, message: 'Success', data: results });
     });
+  });
+  
     
     
   // Endpoint: insertupdateactivities
@@ -858,23 +859,21 @@ router.post('/getuserconsultations', (req, res) => {
     const { username } = req.body;
   
     if (!username) {
-      res.status(400).json({ message: 'Missing username parameter' });
-      return;
+      return res.status(400).json({ message: 'Missing username parameter' });
     }
   
-    connection.query(
-      'SELECT u.name, u.profile_photo, c.consultations_id, c.date, c.review FROM consultations c INNER JOIN users u ON c.users_username = u.username WHERE c.users_username = ?',
-      [username],
-      (error, results) => {
-        if (error) {
-          console.error('Error executing the get user\'s consultations query', error);
-          res.status(500).json({ message: 'Failed to retrieve user\'s consultations' });
-        } else {
-          res.json({ message: 'User\'s consultations retrieved successfully', consultations: results });
-        }
+    const query = 'SELECT d.name, d.profile_photo, c.consultations_id, c.date, c.review FROM consultations c INNER JOIN doctors d ON c.doctors_username = d.username WHERE c.users_username = ?';
+  
+    connection.query(query, [username], (error, results) => {
+      if (error) {
+        console.error('Error executing the get user\'s consultations query', error);
+        return res.status(500).json({ message: 'Failed to retrieve user\'s consultations' });
       }
-    );
+  
+      return res.json({ message: 'User\'s consultations retrieved successfully', consultations: results });
+    });
   });
+  
 
 // Endpoint for uploading profile picture for doctor
 router.post('/uploadprofilepicdoctor', multer.single('profile_photo'), (req, res) => {
