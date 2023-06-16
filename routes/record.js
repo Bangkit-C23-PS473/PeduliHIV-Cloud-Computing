@@ -11,10 +11,10 @@ const multer = Multer({
 
 // MySQL connection configuration
 const connection = mysql.createConnection({
-    host: '34.128.107.84',
-    user: 'root',
-    password: 'PassPeduliHIV',
-    database: 'capstone1',
+    host: 'Our_Public_IP_SQL',
+    user: 'SQL_Usernam',
+    password: 'SQL_Password',
+    database: 'SQL_Database',
   });
 
 // Test the database connection
