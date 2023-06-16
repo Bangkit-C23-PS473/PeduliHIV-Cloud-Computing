@@ -234,50 +234,58 @@ router.post('/login', (req, res) => {
     
     
   // API endpoint for retrieving chat messages
-  router.get('/showchat', (req, res) => {
-      const { consultations_id } = req.query;
-    
-      // Check if consultation ID is provided
-      if (!consultations_id) {
-        return res.status(400).json({ error: 'Missing consultation ID' });
-      }
-    
-      // Retrieve chat messages and doctor information
-      const chatQuery = 'SELECT cs.consultations_id, cs.sender_username, cs.text, cs.time, cs.photo, c.doctors_username FROM consul_chats cs INNER JOIN consultations c ON cs.consultations_id = c.consultations_id WHERE cs.consultations_id = ? ORDER BY cs.time ASC';
-      const doctorQuery = 'SELECT username, name, profile_photo FROM doctors WHERE username = ?';
-    
-      connection.query(chatQuery, [consultations_id], (err, chatResults) => {
-        if (err) {
-          console.error('Error executing chat query:', err);
-          res.status(500).json({ error: 'Failed to retrieve chat messages' });
-        } else {
-          connection.query(doctorQuery, [chatResults[0].doctors_username], (err, doctorResults) => {
-            if (err) {
-              console.error('Error executing doctor query:', err);
-              res.status(500).json({ error: 'Failed to retrieve doctor information' });
-            } else {
-              const dataChat = chatResults.map(chat => {
-                return {
-                  consultations_id: chat.consultations_id,
-                  sender_username: chat.sender_username,
-                  text: chat.text,
-                  time: chat.time,
-                  photo: chat.photo
-                };
-              });
-    
-              const dataDoctor = {
-                username: doctorResults[0].username,
-                name: doctorResults[0].name,
-                photo: doctorResults[0].profile_photo
-              };
-    
-              res.json({ error: false, message: 'success', data: dataChat, doctor: dataDoctor });
-            }
-          });
+router.get('/showchat', (req, res) => {
+    const { consultations_id } = req.query;
+  
+    // Check if consultation ID is provided
+    if (!consultations_id) {
+      return res.status(400).json({ error: 'Missing consultation ID' });
+    }
+  
+    // Retrieve chat messages and doctor information
+    const chatQuery = 'SELECT cs.consultations_id, cs.sender_username, cs.text, cs.time, cs.photo, c.doctors_username FROM consul_chats cs INNER JOIN consultations c ON cs.consultations_id = c.consultations_id WHERE cs.consultations_id = ? ORDER BY cs.time ASC';
+    const doctorQuery = 'SELECT d.username, d.name, d.profile_photo FROM doctors d INNER JOIN consultations c ON d.username = c.doctors_username WHERE c.consultations_id = ?';
+  
+    connection.query(chatQuery, [consultations_id], (err, chatResults) => {
+      if (err) {
+        console.error('Error executing chat query:', err);
+        res.status(500).json({ error: 'Failed to retrieve chat messages' });
+      } else {
+        if (chatResults.length === 0) {
+          return res.status(404).json({ error: 'Consultation ID not found' });
         }
-      });
+  
+        connection.query(doctorQuery, [consultations_id], (err, doctorResults) => {
+          if (err) {
+            console.error('Error executing doctor query:', err);
+            res.status(500).json({ error: 'Failed to retrieve doctor information' });
+          } else {
+            if (doctorResults.length === 0) {
+              return res.status(404).json({ error: 'Doctor not found' });
+            }
+  
+            const dataChat = chatResults.map(chat => {
+              return {
+                consultations_id: chat.consultations_id,
+                sender_username: chat.sender_username,
+                text: chat.text,
+                time: chat.time,
+                photo: chat.photo
+              };
+            });
+  
+            const dataDoctor = {
+              username: doctorResults[0].username,
+              name: doctorResults[0].name,
+              profile_photo: doctorResults[0].profile_photo
+            };
+  
+            res.json({ error: false, message: 'Success', data: dataChat, doctor: dataDoctor });
+          }
+        });
+      }
     });
+  });
     
   // API endpoint for uploading a file
   router.post('/uploadtest', multer.single('file'), imgUpload.uploadToGcs, (req, res) => {
@@ -333,27 +341,31 @@ router.post('/login', (req, res) => {
       });
     });
     
-  // API endpoint for retrieving posts
-  router.get('/getpost', (req, res) => {
-      const { users_username } = req.query;
-    
-      // Check if users_username is provided
-      if (!users_username) {
-        return res.status(400).json({ error: 'Missing username' });
+// API endpoint for retrieving posts
+router.get('/getpost', (req, res) => {
+    const { users_username } = req.query;
+  
+    // Check if users_username is provided
+    if (!users_username) {
+      return res.status(400).json({ error: true, message: 'Missing username' });
+    }
+  
+    // Query to retrieve posts
+    const query = `
+      SELECT p.posts_id, p.title, p.content, p.photo_header, pl.users_username AS is_like
+      FROM posts p
+      LEFT JOIN posts_likes pl ON p.posts_id = pl.posts_id AND pl.users_username = ?
+    `;
+  
+    connection.query(query, [users_username], (err, results) => {
+      if (err) {
+        console.error('Error executing query:', err);
+        return res.status(500).json({ error: true, message: 'Failed to retrieve posts' });
       }
-    
-      // Query to retrieve posts with like status
-      const query = 'SELECT p.posts_id, p.title, p.content, pl.users_username AS is_like FROM posts p LEFT JOIN posts_likes pl ON p.posts_id = pl.posts_id AND pl.users_username = ?';
-    
-      connection.query(query, [users_username], (err, results) => {
-        if (err) {
-          console.error('Error executing query:', err);
-          res.status(500).json({ error: 'Failed to retrieve posts' });
-        } else {
-          res.json({ data: results });
-        }
-      });
+  
+      res.json({ error: false, message: 'Success', data: results });
     });
+  });
     
   // API endpoint for liking a post
   router.post('/likepost', (req, res) => {
